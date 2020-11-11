@@ -45,9 +45,9 @@ class Edrone():
                 
         # initial setting of Kp, Kd and ki for [roll, pitch, yaw]. eg: self.Kp[2] corresponds to Kp value in yaw axis
         # after tuning and computing corresponding PID parameters, change the parameters
-        self.Kp = [1485.0*0.06, 1965.0*0.04, 5000.0*5.0]
-        self.Ki = [0.0, 0.0, 89.0*0.002]
-        self.Kd = [3930.0*0.3, 5000.0*0.2, 5000.0*0.4]
+        self.Kp = [2096.0*0.06, 2403.0*0.04, 5000.0*5.0]
+        self.Ki = [124.0*0.008, 121.0*0.006, 89.0*0.002]
+        self.Kd = [5000.0*0.4, 5000.0*0.4, 5000.0*0.4]
         # Other Parameters
         self.error = [0.0, 0.0, 0.0]
         self.proportional_error = [0.0, 0.0, 0.0]
@@ -92,11 +92,11 @@ class Edrone():
         rospy.Subscriber('/edrone/imu/data', Imu, self.imu_callback)
         
         # Commenting out PID tuner after getting the tuned values
-        '''
-        rospy.Subscriber('/pid_tuning_roll', PidTune, self.roll_set_pid)
-        rospy.Subscriber('/pid_tuning_pitch',PidTune,self.pitch_set_pid)
-        rospy.Subscriber('/pid_tuning_yaw',PidTune,self.yaw_set_pid)
-        '''
+        
+        #rospy.Subscriber('/pid_tuning_roll', PidTune, self.roll_set_pid)
+        #rospy.Subscriber('/pid_tuning_pitch',PidTune,self.pitch_set_pid)
+        #rospy.Subscriber('/pid_tuning_yaw',PidTune,self.yaw_set_pid)
+        
     # Callback functions
     
     def imu_callback(self, msg):
@@ -116,12 +116,12 @@ class Edrone():
     def roll_set_pid(self, roll):
         self.Kp[0] = roll.Kp * 0.06  
         self.Ki[0] = roll.Ki * 0.008
-        self.Kd[0] = roll.Kd * 0.3
+        self.Kd[0] = roll.Kd * 0.4
     # Callback function for /pid_tuning_pitch
     def pitch_set_pid(self, pitch):
         self.Kp[1] = pitch.Kp*0.04
         self.Ki[1] = pitch.Ki*0.006
-        self.Kd[1] = pitch.Kd*0.2
+        self.Kd[1] = pitch.Kd*0.4
     # Callback function for /pid_tuning_yaw
     def yaw_set_pid(self, yaw):
         self.Kp[2] = yaw.Kp*6.0
@@ -180,10 +180,13 @@ class Edrone():
         self.prev_error[0] = self.error[0]
         self.prev_error[1] = self.error[1]
         self.prev_error[2] = self.error[2]  
+        
+        print(self.out_roll)
+        
 
 if __name__ == '__main__':
    try:
-    time.sleep(7)
+    time.sleep(5)
     e_drone = Edrone()
     r = rospy.Rate(1/e_drone.sample_time)  # Rate in Hz based upon your desired PID sampling time
     while not rospy.is_shutdown():

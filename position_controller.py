@@ -63,6 +63,7 @@ class Edrone():
         rospy.Subscriber('/pid_tuning_altitude',PidTune,self.altitude_set_pid)  
         ''' 
         
+        rospy.Subscriber('/edrone/gripper_check', String, self.gp_check) 
     # Callback definations 
     def gps_callback(self, msg):
      
@@ -88,6 +89,8 @@ class Edrone():
      self.Ki[2] = alt.Ki*0.002
      self.Kd[2] = alt.Kd*1
     
+    def gp_check(self, check):
+      self.grp_check = check.data  
 
     def pid(self,dummy_point):
         
@@ -124,6 +127,11 @@ class Edrone():
         self.lat_error_pub.publish(self.lat_error)
         self.long_error_pub.publish(self.long_error)
         self.alt_error_pub.publish(self.alt_error) 
+        
+        if(self.grp_check == 'True'):
+         self.act = rospy.ServiceProxy('/edrone/activate_gripper', Gripper)
+         self.result = self.act(True)   
+        
         # Updating the previous error values     
         self.prev_error[0] = self.error[0]
         self.prev_error[1] = self.error[1]
@@ -139,16 +147,16 @@ if __name__ == '__main__':
     e_drone = Edrone()
     r = rospy.Rate(1/e_drone.sample_time)  # specify rate in Hz based upon your desired PID sampling time
     # Algorithm for changing the setpoints accordingly to trace the path as mentioned in Task 1B.
-    starting_point=[19.0 ,72.0 , 0.31]
+    starting_point=[19.0009248718 ,71.9998318945 , 22.16]
     height=3.0
     flag=0
     errors=[0.0, 0.0 , 0.0]
-    final_setpoint=[19.0000451704,72.0, 0.31]
-    dummy_point=[[starting_point[0],starting_point[1],height],[final_setpoint[0],starting_point[1],height],[final_setpoint[0],final_setpoint[1],final_setpoint[2]]]
+    final_setpoint=[19.0007046575,71.9998955286, 22.1599967919]
+    dummy_point=[final_setpoint]
     
     while not rospy.is_shutdown():
        
-        while flag<3:
+        while flag<2:
             if flag==0:
                 errors=e_drone.pid(dummy_point[0])
                 if abs(errors[2])<0.02 :
@@ -159,16 +167,9 @@ if __name__ == '__main__':
                 if abs(errors[0])<0.000000004517 :
                     flag+=1
                     print(flag)
-            elif flag==2 :
-                errors=e_drone.pid(dummy_point[2])
-                if abs(errors[2])<0.02 :
-                    flag+=1
-                    print(flag)
-                    exit()
             r.sleep()
 
        
   except rospy.ROSInterruptException: 
       pass
     
-#Chill
