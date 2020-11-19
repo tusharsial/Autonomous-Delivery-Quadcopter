@@ -12,6 +12,7 @@ from std_msgs.msg import String
 from vitarana_drone.srv import Gripper
 from sensor_msgs.msg import LaserScan 
 import rospy
+import copy
 
 
 class Edrone():
@@ -42,8 +43,13 @@ class Edrone():
         self.sample_time = 0.060
         self.grp_check = ''
         self.drop = 0.0
-        self.range_top = [0.0, 0.0, 0.0, 0.0]
+        self.range_front = 0.0
+        self.range_right = 0.0
+        self.range_back = 0.0
+        self.range_left = 0.0
         self.range_limit = [0.0, 0.0]
+        self.t = True
+        
         # Declaring lat_error of message type Float32 and initializing values
         self.lat_error = Float32()
         self.lat_error.data = 0.0
@@ -97,10 +103,10 @@ class Edrone():
      self.Kd[2] = alt.Kd*1
     
     def range_top_callback(self, rtop):
-        self.range_top[0] = rtop.ranges[0]
-        self.range_top[1] = rtop.ranges[1]
-        self.range_top[2] = rtop.ranges[2]
-        self.range_top[3] = rtop.ranges[3]
+        self.range_front = rtop.ranges[0]
+        self.range_right = rtop.ranges[1]
+        self.range_back = rtop.ranges[2]
+        self.range_left = rtop.ranges[3]
         self.range_limit[0] = rtop.range_min
         self.range_limit[1] = rtop.range_max
 
@@ -111,28 +117,41 @@ class Edrone():
          return 110692.0702932625 * (input_latitude - 19)
 
     def long_to_y(self, input_longitude):
-         return -105292.0089353767 * (input_longitude - 72)
+         return -105292.0089353767 * (input_longitude - 72)      
     
     def take_off(self, starting_point):
-         set_point = [starting_point[0],starting_point[1], (starting_point[2]+1.5)]
+         set_point = [self.drone_position[0],self.drone_position[1], (starting_point[2]+3)]
          return set_point
     
     def follow_wall(self):
-        #while range_top[0] < range_limit[1] or range_top[1] < range_limit[1] or range_top[2] < range_limit[1] or range_top[3] < range_limit[1] :
-        #while range_top <= 5.01 and range_top>= 4.99:
-        set_point = [self.drone_position[0],self.drone_position[1]+0.1,self.drone_position[2]]
+        if self.t == True:
+            #print("This should not be printed")
+            self.trial_position = copy.deepcopy(self.drone_position)
+            self.t = False      
+        #print("New",self.trial_position) 
+        #print(self.drone_position)
+        set_point = [self.lat_to_x(self.trial_position[0])-10,self.long_to_y(self.trial_position[1]),self.trial_position[2]]
+        print(set_point[0],set_point[1],3.3)
+        set_point = [(set_point[0]/110692.0702932625 + 19), (-set_point[1]/105292.0089353767 + 72),set_point[2]]
         return set_point      
         
     def follow_path(self,final_setpoint):
-        if self.range_top[3] <= 5.01:
-          print(self.range_top)
+        if abs(self.range_left) <= 15 or abs(self.range_back) <= 15 or abs(self.range_front) <= 15 or abs(self.range_right) <= 15:
+          print("Sensor value",self.range_left)
           set_point = self.follow_wall()
-          print('hello')
+          if abs(set_point[0]-self.drone_position[0])< 0.0000004517 :
+            i = 3.0
+            print("only when true",abs(set_point[0]-self.drone_position[0]))
+            set_point = [self.lat_to_x(set_point[0]),self.long_to_y(set_point[1]-i),set_point[2]]
+            print(set_point[0],set_point[1],3.3)
+            set_point = [(set_point[0]/110692.0702932625 + 19), (-set_point[1]/105292.0089353767 + 72),set_point[2]]
+            i = i+3
  
         else:
-         set_point = [final_setpoint[0],final_setpoint[1], (final_setpoint[2]+1.5)]
-        
-        return set_point
+         self.t = True 
+         set_point = [final_setpoint[0],final_setpoint[1], (final_setpoint[2]+3)]
+        p = [set_point, self.t]
+        return p
     
     def land(self,final_setpoint):
          set_point = final_setpoint
@@ -183,8 +202,11 @@ class Edrone():
         self.prev_error[1] = self.error[1]
         self.prev_error[2] = self.error[2]
         # Printing the instantaneous location of the drone (lattitude, longitude and altitude) 
-        #print(dummy_point)
-        print(self.range_top)  
+        #print(self.drone_position)
+        #print(self.range_left) 
+        #print(self.t)
+        #print(self.lat_to_x(self.drone_position[0])-3.3,self.long_to_y(self.drone_position[1]))
+        #print(self.range_left) 
         return self.error    
         
 
@@ -209,13 +231,18 @@ if __name__ == '__main__':
           if abs(errors[2]) < 0.016:
               flag = 1
               print(flag) 
-
+ 
         
         if flag == 1 :
-          set_point = e_drone.follow_path(final_setpoint)
+          z = e_drone.follow_path(final_setpoint)
+          set_point = z[0]
+          t = z[1]
           errors = e_drone.pid(set_point) 
           #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
-          if abs(errors[0]) < 0.0000004517:
+          print(t)
+          if t == False:
+            pass
+          elif abs(errors[0]) < 0.0000004517:
             flag = 2 
             print(flag) 
    
