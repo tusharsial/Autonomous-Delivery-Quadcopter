@@ -10,6 +10,7 @@ from std_msgs.msg import Float32
 from pid_tune.msg import PidTune
 from std_msgs.msg import String
 from vitarana_drone.srv import Gripper
+from sensor_msgs.msg import LaserScan 
 import rospy
 
 
@@ -41,6 +42,8 @@ class Edrone():
         self.sample_time = 0.060
         self.grp_check = ''
         self.drop = 0.0
+        self.range_top = [0.0, 0.0, 0.0, 0.0]
+        self.range_limit = [0.0, 0.0]
         # Declaring lat_error of message type Float32 and initializing values
         self.lat_error = Float32()
         self.lat_error.data = 0.0
@@ -66,7 +69,7 @@ class Edrone():
         #rospy.Subscriber('/pid_tuning_pitch',PidTune,self.pitch_set_pid)
         #rospy.Subscriber('/pid_tuning_altitude',PidTune,self.altitude_set_pid)  
          
-        
+        rospy.Subscriber('/edrone/range_finder_top', LaserScan, self.range_top_callback)
         rospy.Subscriber('/edrone/gripper_check', String, self.gp_check) 
     # Callback definations 
     def gps_callback(self, msg):
@@ -93,9 +96,48 @@ class Edrone():
      self.Ki[2] = alt.Ki*0.002
      self.Kd[2] = alt.Kd*1
     
+    def range_top_callback(self, rtop):
+        self.range_top[0] = rtop.ranges[0]
+        self.range_top[1] = rtop.ranges[1]
+        self.range_top[2] = rtop.ranges[2]
+        self.range_top[3] = rtop.ranges[3]
+        self.range_limit[0] = rtop.range_min
+        self.range_limit[1] = rtop.range_max
+
     def gp_check(self, check):
       self.grp_check = check.data  
+    
+    def lat_to_x(self, input_latitude):
+         return 110692.0702932625 * (input_latitude - 19)
 
+    def long_to_y(self, input_longitude):
+         return -105292.0089353767 * (input_longitude - 72)
+    
+    def take_off(self, starting_point):
+         set_point = [starting_point[0],starting_point[1], (starting_point[2]+1.5)]
+         return set_point
+    
+    def follow_wall(self):
+        #while range_top[0] < range_limit[1] or range_top[1] < range_limit[1] or range_top[2] < range_limit[1] or range_top[3] < range_limit[1] :
+        #while range_top <= 5.01 and range_top>= 4.99:
+        set_point = [self.drone_position[0],self.drone_position[1]+0.1,self.drone_position[2]]
+        return set_point      
+        
+    def follow_path(self,final_setpoint):
+        if self.range_top[3] <= 5.01:
+          print(self.range_top)
+          set_point = self.follow_wall()
+          print('hello')
+ 
+        else:
+         set_point = [final_setpoint[0],final_setpoint[1], (final_setpoint[2]+1.5)]
+        
+        return set_point
+    
+    def land(self,final_setpoint):
+         set_point = final_setpoint
+         return set_point
+     
     def pid(self,dummy_point):
         
         # Calculating setpoints for lattitude, longitude and altitude axises 
@@ -140,9 +182,9 @@ class Edrone():
         self.prev_error[0] = self.error[0]
         self.prev_error[1] = self.error[1]
         self.prev_error[2] = self.error[2]
-        # Printing the instantaneous location of the drone (lattitude, longitude and altitude)
-        print(self.out_roll) 
-        #print(self.drone_position)  
+        # Printing the instantaneous location of the drone (lattitude, longitude and altitude) 
+        #print(dummy_point)
+        print(self.range_top)  
         return self.error    
         
 
@@ -152,36 +194,40 @@ if __name__ == '__main__':
     e_drone = Edrone()
     r = rospy.Rate(1/e_drone.sample_time)  # specify rate in Hz based upon your desired PID sampling time
     # Algorithm for changing the setpoints accordingly to trace the path as mentioned in Task 1B.
-    starting_point=[19.00002710245132 ,71.99999999999834 , 0.31]
-    height=3.0
-    flag=0
+    starting_point=[19.000027107343833, 71.9999999994294, 0.30999747813892525]
     errors=[0.0, 0.0 , 0.0]
-    final_setpoint=[19.0,72.0, 3]
-    dummy_point=[[starting_point[0],starting_point[1],height],final_setpoint,[final_setpoint[0],final_setpoint[1],starting_point[2]],final_setpoint]
-    
+    set_point = [0.0, 0.0, 0.0]
+    final_setpoint=[19.0,72.0, 0.31]
+    flag = 0.0
     while not rospy.is_shutdown():
-       
-        while flag<4:
-            if flag==0:
-                errors=e_drone.pid(dummy_point[0])
-                if abs(errors[2])<0.015 :
-                    flag+=1
-                    print(flag)
-            elif flag==1 :
-                errors=e_drone.pid(dummy_point[1])
-                if abs(errors[0])<0.000000004517 :
-                    flag+=1
-                    print(flag)
-            elif flag==2 :
-                errors=e_drone.pid(dummy_point[2])
-                if abs(errors[2])<0.015 :
-                    flag+=1
-                    print(flag)
-            elif flag==3 :
-                errors=e_drone.pid(dummy_point[3])
-            r.sleep()                    
+      while flag < 4:
+        
+        if flag == 0:
+          set_point = e_drone.take_off(starting_point)
+          #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
+          errors = e_drone.pid(set_point)
+          if abs(errors[2]) < 0.016:
+              flag = 1
+              print(flag) 
+
+        
+        if flag == 1 :
+          set_point = e_drone.follow_path(final_setpoint)
+          errors = e_drone.pid(set_point) 
+          #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
+          if abs(errors[0]) < 0.0000004517:
+            flag = 2 
+            print(flag) 
+   
+        elif flag == 2 :
+           set_point = e_drone.land(final_setpoint)
+           errors = e_drone.pid(set_point)
+           #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
+        r.sleep()                
        
        
   except rospy.ROSInterruptException: 
       pass
     
+
+        
