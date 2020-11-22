@@ -13,6 +13,13 @@ from vitarana_drone.srv import Gripper
 from sensor_msgs.msg import LaserScan 
 import rospy
 import copy
+import time 
+global c
+c = 0
+global initial_time
+initial_time = 0.0
+global range_sensor
+range_sensor = [0.0, 0.0, 0.0, 0.0]
 
 
 class Edrone():
@@ -43,12 +50,8 @@ class Edrone():
         self.sample_time = 0.060
         self.grp_check = ''
         self.drop = 0.0
-        self.range_front = 0.0
-        self.range_right = 0.0
-        self.range_back = 0.0
-        self.range_left = 0.0
-        self.range_limit = [0.0, 0.0]
-        self.t = True
+        
+        range_sensor_limit = [0.0, 0.0]
         
         # Declaring lat_error of message type Float32 and initializing values
         self.lat_error = Float32()
@@ -103,13 +106,12 @@ class Edrone():
      self.Kd[2] = alt.Kd*1
     
     def range_top_callback(self, rtop):
-        self.range_front = rtop.ranges[0]
-        self.range_right = rtop.ranges[1]
-        self.range_back = rtop.ranges[2]
-        self.range_left = rtop.ranges[3]
-        self.range_limit[0] = rtop.range_min
-        self.range_limit[1] = rtop.range_max
-
+        global range_sensor
+        range_sensor[0] = rtop.ranges[0]
+        range_sensor[1] = rtop.ranges[1]
+        range_sensor[2] = rtop.ranges[2]
+        range_sensor[3] = rtop.ranges[3]
+        
     def gp_check(self, check):
       self.grp_check = check.data  
     
@@ -123,42 +125,99 @@ class Edrone():
          set_point = [self.drone_position[0],self.drone_position[1], (starting_point[2]+3)]
          return set_point
     
-    def follow_wall(self):
-        if self.t == True:
-            #print("This should not be printed")
-            self.trial_position = copy.deepcopy(self.drone_position)
-            self.t = False      
-        #print("New",self.trial_position) 
-        #print(self.drone_position)
-        set_point = [self.lat_to_x(self.trial_position[0])-10,self.long_to_y(self.trial_position[1]),self.trial_position[2]]
-        print(set_point[0],set_point[1],3.3)
-        set_point = [(set_point[0]/110692.0702932625 + 19), (-set_point[1]/105292.0089353767 + 72),set_point[2]]
-        return set_point      
-        
-    def follow_path(self,final_setpoint):
-        if abs(self.range_left) <= 15 or abs(self.range_back) <= 15 or abs(self.range_front) <= 15 or abs(self.range_right) <= 15:
-          print("Sensor value",self.range_left)
-          set_point = self.follow_wall()
-          if abs(set_point[0]-self.drone_position[0])< 0.0000004517 :
-            i = 3.0
-            print("only when true",abs(set_point[0]-self.drone_position[0]))
-            set_point = [self.lat_to_x(set_point[0]),self.long_to_y(set_point[1]-i),set_point[2]]
-            print(set_point[0],set_point[1],3.3)
-            set_point = [(set_point[0]/110692.0702932625 + 19), (-set_point[1]/105292.0089353767 + 72),set_point[2]]
-            i = i+3
- 
-        else:
-         self.t = True 
-         set_point = [final_setpoint[0],final_setpoint[1], (final_setpoint[2]+3)]
-        p = [set_point, self.t]
-        return p
+    def follow_wall(self,i,final_setpoint):
+           
+          global c, initial_time,range_sensor
+          if c == 0:
+            initial_time = time.time()
+            c = 1
+
+          print("Following wall")  
+          rand_point=[0.0,0.0,0.0]
+          if i==0:
+            print(i)
+            rand_point=[self.drone_position[0]-1E-4,self.drone_position[1]+(range_sensor[0]-5)/(-105292.0089353767),final_setpoint[2]+16.84999679]
+          elif i==1:
+            print(i)
+            rand_point=[self.drone_position[0]+(range_sensor[1]-5)/110692.07029,self.drone_position[1]-1E-4,final_setpoint[2]+16.84999679]
+          elif i==2:
+            print(i)
+            rand_point=[self.drone_position[0]-1E-4,self.drone_position[1]-(range_sensor[2]-5)/105292.0089353767,final_setpoint[2]+16.84999679]
+          if i==3:
+            print(i)
+            rand_point=[self.drone_position[0]-(range_sensor[3]-5)/110692.07029,self.drone_position[1]+1E-4,final_setpoint[2]+16.84999679]
+          else:
+            pass
+          c = 1
+          return rand_point 
+
+    def distance_calculated(self,p1, p2):
+      
+      p0 = [self.lat_to_x(self.drone_position[0]), self.long_to_y(self.drone_position[1]), self.drone_position[2]]
+      u1 = abs((p2[1]-p1[1])*p0[0] - (p2[0] -p1[0])*p0[1] + p2[0]*p1[1] - p1[0]*p2[1])
+      u2 =  (pow((p2[0]-p1[0]),2) + pow((p2[1]-p1[1]),2))**(0.5)
+      return u1/u2          
+
+    def follow_destination(self,final_setpoint):
+      print("Go to final")
+      final_setpoint=[final_setpoint[0],final_setpoint[1], final_setpoint[2]+16.84999679]
+      
+      return final_setpoint
+
     
+    def follow_path(self,final_setpoint):
+            global range_sensor 
+            dummy_point=[0.0,0.0,0.0]
+            if range_sensor[0]<=15 and range_sensor[0]>0.5:
+                if range_sensor[0]>5.1:
+                  print("Chalte jao front")
+                  dummy_point=[self.drone_position[0],self.drone_position[1]+(range_sensor[0]-5)/(-105292.0089353767),final_setpoint[2]+16.84999679]
+                  
+                else:
+                  print("Front sensor working")
+                  dummy_point=self.follow_wall(0,final_setpoint)
+            elif abs(range_sensor[1])<=15 and range_sensor[1]>0.5:
+                if abs(range_sensor[1])>5.1:
+                  print("Chalte jao right")
+                  dummy_point=[self.drone_position[0]+(range_sensor[1]-5)/110692.07029,self.drone_position[1],final_setpoint[2]+16.84999679]
+                else:
+                  print("Right sensor working")
+                  dummy_point=self.follow_wall(1,final_setpoint)
+            elif abs(range_sensor[2])<=15 and range_sensor[2]>0.5:
+                if abs(range_sensor[2])>5.1:
+                  print("Chalte jao back")
+                  dummy_point=[self.drone_position[0],self.drone_position[1]-(range_sensor[2]-5)/(-105292.0089353767),final_setpoint[2]+16.84999679]
+                  print(dummy_point)
+                else:
+                  print("back sensor working")
+                  dummy_point=self.follow_wall(2,final_setpoint) 
+            elif abs(range_sensor[3])<=15 and range_sensor[3]>0.5:
+                if abs(range_sensor[3])>5.1:
+                  print("Chalte jao left")
+                  dummy_point=[self.drone_position[0]-(range_sensor[3]-5)/110692.07029,self.drone_position[1],final_setpoint[2]+16.84999679]
+                else:
+                  print("Left sensor working")
+                  dummy_point=self.follow_wall(3,final_setpoint)
+            else:
+              print("Go to final")
+              dummy_point=[final_setpoint[0],final_setpoint[1], final_setpoint[2]+16.84999679]
+              initial_time = 0.0
+            return dummy_point
+
+            
+              
+
+   
+        
+            
+
+
     def land(self,final_setpoint):
-         set_point = final_setpoint
+         set_point = [final_setpoint[0],final_setpoint[1],final_setpoint[2]]
          return set_point
      
     def pid(self,dummy_point):
-        
+        global range_sensor
         # Calculating setpoints for lattitude, longitude and altitude axises 
         self.error[0] = dummy_point[0] - self.drone_position[0]
         self.error[1] = dummy_point[1] - self.drone_position[1]
@@ -180,9 +239,9 @@ class Edrone():
         self.out_pitch = self.proportional_error[1]+self.derivative_error[1]+self.sum_error[1]
         self.out_throttle = self.proportional_error[2]+self.derivative_error[2]+self.sum_error[2]
         # Calculating roll, pitch, yaw and throttle 
-        self.drone_cmd.rcRoll = max(1490,min(1510,(1500 + self.out_roll)))
-        self.drone_cmd.rcPitch = max(1490,min(1510,(1500 + self.out_pitch)))
-        self.drone_cmd.rcThrottle = 1500 + self.out_throttle 
+        self.drone_cmd.rcRoll = max(1495,min(1505,(1500 + self.out_roll)))
+        self.drone_cmd.rcPitch = max(1495,min(1505,(1500 + self.out_pitch)))
+        self.drone_cmd.rcThrottle = max(1495,min(1505,(1500 + self.out_throttle))) 
         # Assigning lattitude error,longitude error and altitude error to the 3 pub    
         self.lat_error.data = self.error[0]
         self.long_error.data = self.error[1]
@@ -202,11 +261,18 @@ class Edrone():
         self.prev_error[1] = self.error[1]
         self.prev_error[2] = self.error[2]
         # Printing the instantaneous location of the drone (lattitude, longitude and altitude) 
-        #print(self.drone_position)
-        #print(self.range_left) 
+        
+        #print(range_sensor_left) 
         #print(self.t)
-        #print(self.lat_to_x(self.drone_position[0])-3.3,self.long_to_y(self.drone_position[1]))
-        #print(self.range_left) 
+        #print(self.lat_to_x(self.drone_position[0]),self.long_to_y(self.drone_position[1]))
+        #print(range_sensor)
+        #print(self.drone_position)
+        #print(self.lat_to_x(self.drone_position[0]),self.long_to_y(self.drone_position[1]),self.drone_position[2])
+        #print(self.drone_position[0]-(range_sensor[3]-2)/110692.07029,self.drone_position[1],self.drone_position[2]) 
+        #print(self.lat_to_x(self.drone_position[0]-(range_sensor[3]-2)/110692.07029),self.long_to_y(self.drone_position[1]),self.drone_position[2])
+        print("Range sensors", range_sensor)
+        print("Current time", time.time(), " Initial time", initial_time)
+        print(c, "Time difference", time.time()-initial_time)
         return self.error    
         
 
@@ -215,41 +281,52 @@ if __name__ == '__main__':
   try:
     e_drone = Edrone()
     r = rospy.Rate(1/e_drone.sample_time)  # specify rate in Hz based upon your desired PID sampling time
-    # Algorithm for changing the setpoints accordingly to trace the path as mentioned in Task 1B.
-    starting_point=[19.000027107343833, 71.9999999994294, 0.30999747813892525]
+    # Algorithm for changing the setpoints accordingly to trace the path as mentioned in Task 1B
+    
+    starting_point=[19.0007046575, 71.9998955286, 22.1599967919]
+    final_setpoint=[19.0,72.0,8.31]
+    sp_xy = [e_drone.lat_to_x(starting_point[0]), e_drone.long_to_y(starting_point[1]), starting_point[2]+3]
+    fp_xy = [e_drone.lat_to_x(final_setpoint[0]), e_drone.long_to_y(final_setpoint[1]), final_setpoint[2]+16.84999679]
     errors=[0.0, 0.0 , 0.0]
     set_point = [0.0, 0.0, 0.0]
-    final_setpoint=[19.0,72.0, 0.31]
+    
+    
     flag = 0.0
+    distance = 0.0 
     while not rospy.is_shutdown():
       while flag < 4:
-        
+        distance = e_drone.distance_calculated(sp_xy,fp_xy)
+        print("Current distance", distance)
         if flag == 0:
           set_point = e_drone.take_off(starting_point)
-          #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
           errors = e_drone.pid(set_point)
-          if abs(errors[2]) < 0.016:
-              flag = 1
-              print(flag) 
- 
-        
-        if flag == 1 :
-          z = e_drone.follow_path(final_setpoint)
-          set_point = z[0]
-          t = z[1]
-          errors = e_drone.pid(set_point) 
-          #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
-          print(t)
-          if t == False:
-            pass
-          elif abs(errors[0]) < 0.0000004517:
-            flag = 2 
-            print(flag) 
-   
-        elif flag == 2 :
-           set_point = e_drone.land(final_setpoint)
+          if abs(errors[2]) < 0.02:
+              set_point = e_drone.follow_destination(final_setpoint)
+              flag = 1 
+              print("lift complete")
+
+          
+        elif flag == 1 :
+          if distance < 1.5 and  time.time()-initial_time > 7 and initial_time != 0:
+            print("Exit obstacle")
+            c = 0
+            intial_time = 0
+            set_point=e_drone.follow_destination(final_setpoint)
+            
+          elif range_sensor[0] > 0.4 and range_sensor[1] > 0.4 and range_sensor[2] > 0.4 and range_sensor[3]>0.4 :
+            print("Object detection")
+            set_point=e_drone.follow_path(final_setpoint)   
+          errors=e_drone.pid(set_point)
+            
+
+          
+        elif flag == 3 :
+           print(flag)
+           set_point = [final_setpoint[0],final_setpoint[1],final_setpoint[2]]
            errors = e_drone.pid(set_point)
-           #set_point = [e_drone.lat_to_x(set_point[0]),e_drone.long_to_y(set_point[1]), set_point[2]]
+        
+        else:
+          print("complete")
         r.sleep()                
        
        
