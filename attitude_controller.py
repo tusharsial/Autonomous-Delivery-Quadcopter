@@ -182,12 +182,12 @@ class Edrone():
         self.prev_error[1] = self.error[1]
         self.prev_error[2] = self.error[2]  
         
-        print(self.out_roll)
+        #print(self.out_roll)
         
 
 if __name__ == '__main__':
    try:
-    time.sleep(5)
+    time.sleep(7)
     e_drone = Edrone()
     r = rospy.Rate(1/e_drone.sample_time)  # Rate in Hz based upon your desired PID sampling time
     while not rospy.is_shutdown():
