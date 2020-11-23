@@ -1,2 +1,2 @@
 # Task_2
-This repository will be used to add, create and edit the required files for Task 2
+This repository contains all the required files for completing Task 2 successfully
