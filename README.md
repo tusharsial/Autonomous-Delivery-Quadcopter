@@ -18,5 +18,11 @@ For path planning and obstacle avoidance, I leveraged the Bugs 0 algorithm. By h
 The drone is equipped with a gripper mechanism at the bottom which can grasp objects. The gripper can be activated only when it is in close vicinity of the package. The delivery package has a QR tag on its top which contains the GPS coordinates of the final destination. I've implemented a pyzbar library-based computer vision algorithm for detecting the QR tag on delivery packages.  
 
 # Simulation Video
+The quadcopter starts from the position i.e. latitude: 19.0009248718, longitude: 71.9998318945, altitude: 22.16. The quadcopter first goes to latitude: 19.0007046575, longitude: 71.9998955286, altitude: 22.1599967919 where the delivery package is, picks up the package using the gripper mechanism, scans the QR code on the top of the package which contains the final destination where the package is to be delivered, and then finally navigates to that location. The following video demonstrates the autonomous delivery of the package via the quadcopter in a city environment. 
+
 https://user-images.githubusercontent.com/74113713/205676430-6f412288-dd65-4a34-9c55-186bd46800fc.mp4
 
+# Future Scope
+* Use Sophisticated Path-planning algorithms like A* and Dijkstra.
+* Look into adaptive and model-free control techniques (like Neural networks, Fuzzy logic, or reinforcement learning-based algorithms)
+* Perform State estimation using techniques like Kalman Filter, Extended Kalman Filter, etc. 
